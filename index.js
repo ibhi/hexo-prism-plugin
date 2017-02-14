@@ -1,4 +1,4 @@
-'use strict'
+'use strict';
 
 const fs = require('hexo-fs');
 const path = require('path');
@@ -14,6 +14,19 @@ const map = {
 };
 
 const regex = /<pre><code class="(.*)?">([\s\S]*?)<\/code><\/pre>/igm;
+
+const baseDir = hexo.base_dir;
+const prismDir = path.join(baseDir, 'node_modules', 'prismjs');
+const prismThemeDir = path.join(prismDir, 'themes');
+const prismjsFilePath = path.join(prismThemeDir, 'prism.js');
+
+// Plugin settings from config
+let prismThemeName = hexo.config.prism_plugin.theme || '';
+let mode = hexo.config.prism_plugin.mode || 'preprocess';
+let line_number = hexo.config.prism_plugin.line_number || false;
+
+const prismThemeFileName = 'prism' + (prismThemeName === 'default' ? '' : `-${prismThemeName}`) + '.css';
+const prismThemeFilePath = path.join(prismThemeDir, prismThemeFileName);
 
 // Unescape from Marked escape.
 function unescape(str) {
@@ -52,29 +65,21 @@ function PrismPlugin(data) {
 
 hexo.extend.filter.register('after_post_render', PrismPlugin);
 
-hexo.extend.generator.register('prism_asset', function (locals) {
-  const baseDir = hexo.base_dir;
-  const prismDir = path.join(baseDir, 'node_modules', 'prismjs');
-  const prismThemeDir = path.join(prismDir, 'themes');
-  const prismjsFilePath = path.join(prismThemeDir, 'prism.js');
-
-  // Plugin settings from config
-  let prismThemeName = hexo.config.prism_plugin.theme || '';
-  let mode = hexo.config.prism_plugin.mode || 'preprocess';
-  let line_number = hexo.config.prism_plugin.line_number || false;
-
-  const prismThemeFileName = 'prism' + (prismThemeName === 'default' ? '' : `-${prismThemeName}`) + '.css';
-  const prismThemeFilePath = path.join(prismThemeDir, prismThemeFileName);
+hexo.extend.generator.register('prism_assets', function () {
 
   // Register scripts and stylesheets
   let assets = [{
     path: `css/${prismThemeFileName}`,
     data: () => fs.createReadStream(prismThemeFilePath)
-  }, {
-    path: `css/${prismThemeFileName}`,
-    data: () => fs.createReadStream(prismThemeFilePath)
   }];
-  // If prism onfig mode is realtime include prism.js and line-numbers.js
+  // If line_number is enabled in plugin config add the corresponding stylesheet
+  if(line_number) {
+    assets.push({
+      path: 'css/prism-line-numbers.css',
+      data: () => fs.createReadStream(path.join(prismDir, 'plugins/line-numbers', 'prism-line-numbers.css'))
+    });
+  }
+  // If prism plugin config mode is realtime include prism.js and line-numbers.js
   if (mode === 'realtime') {
     assets.push({
       path: 'js/prism.js',
@@ -93,9 +98,22 @@ hexo.extend.generator.register('prism_asset', function (locals) {
 
 hexo.extend.filter.register('after_render:html', function (str, data) {
 
-  var css = "<link rel=\"stylesheet\" href=\"/css/gist.css\" type=\"text/css\">";
+  let css = `<link rel="stylesheet" href="/css/${prismThemeFileName}" type="text/css">`;
 
-  str = str.replace(/<\s*\/\s*head\s*>/, css + "</head>");
-  console.log('String ', str);
+  let js = '';
+
+  if(line_number) {
+    css += `<link rel="stylesheet" href="/css/prism-line-numbers.css" type="text/css">`;
+  }
+
+  if(mode === 'realtime') {
+    js +=  '<script src="/js/prism.js"></script>';
+    if(line_number) {
+      js += '<script src="/js/prism-line-numbers.min.js"></script>';
+    }
+  }
+
+  str = str.replace(/<\s*\/\s*head\s*>/, css + js + '</head>');
+  //console.log('String ', str);
   return str;
 });
